@@ -87,15 +87,7 @@ function Dashboard() {
                 <span>Queue Size</span>
                 <strong>{articles.length}</strong>
               </div>
-              <div className="summary-card">
-                <span>Loading State</span>
-                <strong>{isLoading ? "Yes" : "No"}</strong>
-              </div>
-              <div className="summary-card">
-                <span>Status</span>
-                <strong>{error ? "Error" : "Ready"}</strong>
-              </div>
-            </div>
+             </div>
 
             <div className="article-list">
               {isLoading ? (

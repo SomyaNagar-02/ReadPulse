@@ -1,13 +1,34 @@
+const axios = require("axios");
+const cheerio = require("cheerio");
 const Article = require("../models/Article");
 
-// This helper gives a very simple reading time estimate
-// Since we only receive title and url, we use the title word count
-// Real projects usually calculate this from the full article content
-const estimateReadingTime = (title) => {
-  const words = title.trim().split(/\s+/).filter(Boolean).length;
+// This helper fetches the article page and estimates reading time from real text
+// If scraping fails for any reason, it falls back to 5 minutes
+const estimateReadingTimeFromUrl = async (url) => {
+  try {
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 ReadPulseBot"
+      }
+    });
 
-  // Keep at least 1 minute so the value is always usable
-  return Math.max(1, Math.ceil(words / 5));
+    const $ = cheerio.load(response.data);
+
+    // Remove elements that usually do not belong to the main readable content
+    $("script, style, noscript").remove();
+
+    // Extract visible text from the page and normalize spacing
+    const text = $("body").text().replace(/\s+/g, " ").trim();
+    const words = text.split(" ").filter(Boolean).length;
+
+    // Reading time is based on 200 words per minute
+    // Keep at least 1 minute even for short pages
+    return Math.max(1, Math.ceil(words / 200));
+  } catch (error) {
+    // If scraping fails, return a simple safe default
+    return 5;
+  }
 };
 
 // These are the only valid article status values
@@ -51,8 +72,9 @@ const createArticle = async (req, res, next) => {
       });
     }
 
-    // Estimate reading time with our simple helper
-    const readingTime = estimateReadingTime(title);
+    // Estimate reading time from the actual article HTML
+    // If scraping fails, the helper returns a default of 5 minutes
+    const readingTime = await estimateReadingTimeFromUrl(url);
 
     // Save the article and connect it to the logged-in user
     // req.userId is added by the JWT auth middleware
