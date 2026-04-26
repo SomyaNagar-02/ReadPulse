@@ -5,6 +5,7 @@ const {
   getAllUserArticles,
   getReadingSuggestions,
   updateArticleStatus,
+  scheduleArticle,
   deleteArticle
 } = require("../controllers/articleController");
 const protect = require("../middleware/authMiddleware");
@@ -34,6 +35,10 @@ router.post("/add", protect, createArticle);
 // PUT /api/articles/:id/status -> update an article status
 // The route is protected and only allows valid status values
 router.put("/:id/status", protect, updateArticleStatus);
+
+// PUT /api/articles/schedule/:id -> schedule an article for later
+// The route is protected and stores a scheduled date/time
+router.put("/schedule/:id", protect, scheduleArticle);
 
 // DELETE /api/articles/:id -> delete an article
 // The route is protected and only deletes articles owned by the logged-in user

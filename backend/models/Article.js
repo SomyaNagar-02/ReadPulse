@@ -35,6 +35,13 @@ const articleSchema = new mongoose.Schema(
       default: 0
     },
 
+    // If the user schedules an article for later,
+    // this stores the exact date and time when it should return
+    scheduledAt: {
+      type: Date,
+      default: null
+    },
+
     // Current progress status of the article
     status: {
       type: String,

@@ -98,13 +98,26 @@ const createArticle = async (req, res, next) => {
 // Fetch articles for the logged-in user
 const getUserArticles = async (req, res, next) => {
   try {
-    const filter = buildArticleFilter(req.userId, req.query);
+    const filter = {
+      user: req.userId,
+      $or: [
+        { status: "saved" },
+        {
+          status: "scheduled",
+          scheduledAt: { $lte: new Date() }
+        }
+      ]
+    };
+
+    // Optional title search still works, but queue membership stays behavior-driven
+    if (req.query.keyword) {
+      filter.title = { $regex: req.query.keyword, $options: "i" };
+    }
 
     const articles = await Article.find(filter)
-      // First we prioritize older articles by sorting createdAt in ascending order
-      // Then, if articles are similar in age, shorter reading time comes first
-      // This keeps the logic simple while still favoring older and quicker reads
-      .sort({ createdAt: 1, readingTime: 1 })
+      // Scheduled articles that are due are surfaced by the earliest time first
+      // If times are similar, older articles are shown before newer ones
+      .sort({ scheduledAt: 1, createdAt: 1 })
       // Limit keeps the response small and returns only 5 articles
       .limit(5);
 
@@ -120,8 +133,8 @@ const getAllUserArticles = async (req, res, next) => {
     const filter = buildArticleFilter(req.userId, req.query);
 
     const articles = await Article.find(filter)
-      // Keep the same simple sorting so older and shorter reads appear first
-      .sort({ createdAt: 1, readingTime: 1 });
+      // Scheduled items are grouped by their planned time, then by age
+      .sort({ scheduledAt: 1, createdAt: 1 });
 
     res.status(200).json(articles);
   } catch (error) {
@@ -144,10 +157,16 @@ const getReadingSuggestions = async (req, res, next) => {
     const articles = await Article.find({
       user: req.userId,
       readingTime: { $lte: minutes },
-      status: { $ne: "completed" }
+      $or: [
+        { status: "saved" },
+        {
+          status: "scheduled",
+          scheduledAt: { $lte: new Date() }
+        }
+      ]
     })
-      // Older saved articles are nudged first so the reading list does not go stale
-      .sort({ createdAt: 1, readingTime: 1 })
+      // Older eligible articles are nudged first so the reading list does not go stale
+      .sort({ scheduledAt: 1, createdAt: 1 })
       .limit(3);
 
     res.status(200).json(articles);
@@ -206,10 +225,63 @@ const updateArticleStatus = async (req, res, next) => {
 
     // Update the status field and save the changes
     article.status = status;
+
+    // If the article moves away from scheduled mode, clear the scheduled time
+    if (status !== "scheduled") {
+      article.scheduledAt = null;
+    }
+
     await article.save();
 
     res.status(200).json({
       message: "Article status updated successfully",
+      article
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Schedule an article for a future time
+const scheduleArticle = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { scheduledAt } = req.body;
+
+    // Validate that a date value was actually sent
+    if (!scheduledAt) {
+      return res.status(400).json({
+        message: "scheduledAt is required"
+      });
+    }
+
+    const scheduledDate = new Date(scheduledAt);
+
+    // Invalid dates become "Invalid Date", so check that before saving
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return res.status(400).json({
+        message: "Please provide a valid scheduled date"
+      });
+    }
+
+    const article = await Article.findOne({
+      _id: id,
+      user: req.userId
+    });
+
+    if (!article) {
+      return res.status(404).json({
+        message: "Article not found"
+      });
+    }
+
+    // Scheduling means the article should be reintroduced later
+    article.status = "scheduled";
+    article.scheduledAt = scheduledDate;
+    await article.save();
+
+    res.status(200).json({
+      message: "Article scheduled successfully",
       article
     });
   } catch (error) {
@@ -248,5 +320,6 @@ module.exports = {
   getAllUserArticles,
   getReadingSuggestions,
   updateArticleStatus,
+  scheduleArticle,
   deleteArticle
 };

@@ -40,10 +40,10 @@ function AllArticles() {
     loadArticles();
   }, [searchTerm, statusFilter]);
 
-  const updateArticleInState = (articleId, newStatus) => {
+  const updateArticleInState = (articleId, updates) => {
     setArticles((currentArticles) =>
       currentArticles.map((article) =>
-        article._id === articleId ? { ...article, status: newStatus } : article
+        article._id === articleId ? { ...article, ...updates } : article
       )
     );
   };
@@ -53,16 +53,22 @@ function AllArticles() {
       // Open the article and mark it as reading
       window.open(articleUrl, "_blank", "noopener,noreferrer");
       await api.updateArticleStatus(articleId, "reading");
-      updateArticleInState(articleId, "reading");
+      updateArticleInState(articleId, {
+        status: "reading",
+        scheduledAt: null
+      });
     } catch (actionError) {
       setError(actionError.message);
     }
   };
 
-  const handleSchedule = async (articleId) => {
+  const handleSchedule = async (articleId, scheduledAt) => {
     try {
-      await api.updateArticleStatus(articleId, "scheduled");
-      updateArticleInState(articleId, "scheduled");
+      const data = await api.scheduleArticle(articleId, scheduledAt);
+      updateArticleInState(articleId, {
+        status: data.article.status,
+        scheduledAt: data.article.scheduledAt
+      });
     } catch (actionError) {
       setError(actionError.message);
     }

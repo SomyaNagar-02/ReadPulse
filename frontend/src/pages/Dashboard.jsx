@@ -27,10 +27,10 @@ function Dashboard() {
     loadArticles();
   }, []);
 
-  const updateArticleInState = (articleId, newStatus) => {
+  const updateArticleInState = (articleId, updates) => {
     setArticles((currentArticles) =>
       currentArticles.map((article) =>
-        article._id === articleId ? { ...article, status: newStatus } : article
+        article._id === articleId ? { ...article, ...updates } : article
       )
     );
   };
@@ -40,16 +40,23 @@ function Dashboard() {
       // Open the article first, then mark it as currently reading
       window.open(articleUrl, "_blank", "noopener,noreferrer");
       await api.updateArticleStatus(articleId, "reading");
-      updateArticleInState(articleId, "reading");
+      updateArticleInState(articleId, {
+        status: "reading",
+        scheduledAt: null
+      });
     } catch (actionError) {
       setError(actionError.message);
     }
   };
 
-  const handleSchedule = async (articleId) => {
+  const handleSchedule = async (articleId, scheduledAt) => {
     try {
-      await api.updateArticleStatus(articleId, "scheduled");
-      updateArticleInState(articleId, "scheduled");
+      await api.scheduleArticle(articleId, scheduledAt);
+
+      // Once an item is scheduled for the future, remove it from the live queue
+      setArticles((currentArticles) =>
+        currentArticles.filter((article) => article._id !== articleId)
+      );
     } catch (actionError) {
       setError(actionError.message);
     }

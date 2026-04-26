@@ -85,6 +85,14 @@ export const api = {
     });
   },
 
+  // Schedule an article for a specific future date and time
+  scheduleArticle: async (articleId, scheduledAt) => {
+    return request(`/articles/schedule/${articleId}`, {
+      method: "PUT",
+      body: JSON.stringify({ scheduledAt })
+    });
+  },
+
   // Delete an article from the logged-in user's library
   deleteArticle: async (articleId) => {
     return request(`/articles/${articleId}`, {
