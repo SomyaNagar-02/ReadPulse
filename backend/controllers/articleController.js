@@ -142,6 +142,21 @@ const getAllUserArticles = async (req, res, next) => {
   }
 };
 
+// Fetch scheduled articles that are ready right now
+const getScheduledReadyArticles = async (req, res, next) => {
+  try {
+    const articles = await Article.find({
+      user: req.userId,
+      status: "scheduled",
+      scheduledAt: { $lte: new Date() }
+    }).sort({ scheduledAt: 1, createdAt: 1 });
+
+    res.status(200).json(articles);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Suggest a few articles that fit inside the user's available reading time
 const getReadingSuggestions = async (req, res, next) => {
   try {
@@ -278,10 +293,43 @@ const scheduleArticle = async (req, res, next) => {
     // Scheduling means the article should be reintroduced later
     article.status = "scheduled";
     article.scheduledAt = scheduledDate;
+    article.notifiedAt = null;
     await article.save();
 
     res.status(200).json({
       message: "Article scheduled successfully",
+      article
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Mark a scheduled article as notified after the user clicks the notification
+const markArticleAsNotified = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const article = await Article.findOne({
+      _id: id,
+      user: req.userId
+    });
+
+    if (!article) {
+      return res.status(404).json({
+        message: "Article not found"
+      });
+    }
+
+    // Once the user clicks the notification, bring the article back
+    // into the normal reading flow by moving it back to saved.
+    article.status = "saved";
+    article.notifiedAt = new Date();
+    article.scheduledAt = null;
+    await article.save();
+
+    res.status(200).json({
+      message: "Article marked as notified",
       article
     });
   } catch (error) {
@@ -318,8 +366,10 @@ module.exports = {
   createArticle,
   getUserArticles,
   getAllUserArticles,
+  getScheduledReadyArticles,
   getReadingSuggestions,
   updateArticleStatus,
   scheduleArticle,
+  markArticleAsNotified,
   deleteArticle
 };

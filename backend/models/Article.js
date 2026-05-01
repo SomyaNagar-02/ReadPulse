@@ -42,6 +42,13 @@ const articleSchema = new mongoose.Schema(
       default: null
     },
 
+    // This stores when the user was last notified about the article
+    // It helps keep the notification flow explicit and easy to inspect
+    notifiedAt: {
+      type: Date,
+      default: null
+    },
+
     // Current progress status of the article
     status: {
       type: String,

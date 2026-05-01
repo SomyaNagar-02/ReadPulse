@@ -3,9 +3,11 @@ const {
   createArticle,
   getUserArticles,
   getAllUserArticles,
+  getScheduledReadyArticles,
   getReadingSuggestions,
   updateArticleStatus,
   scheduleArticle,
+  markArticleAsNotified,
   deleteArticle
 } = require("../controllers/articleController");
 const protect = require("../middleware/authMiddleware");
@@ -19,6 +21,10 @@ router.get("/", protect, getUserArticles);
 // GET /api/articles/all -> fetch all articles for the logged-in user
 // This route supports search and status filtering without the 5-item limit
 router.get("/all", protect, getAllUserArticles);
+
+// GET /api/articles/scheduled-ready -> fetch scheduled articles whose time has arrived
+// This route is protected and returns only ready-to-notify scheduled articles
+router.get("/scheduled-ready", protect, getScheduledReadyArticles);
 
 // GET /api/articles/suggestions?minutes=10 -> suggest articles that fit the time
 // This is used by the Chrome extension's time-based reading nudge
@@ -39,6 +45,10 @@ router.put("/:id/status", protect, updateArticleStatus);
 // PUT /api/articles/schedule/:id -> schedule an article for later
 // The route is protected and stores a scheduled date/time
 router.put("/schedule/:id", protect, scheduleArticle);
+
+// PUT /api/articles/mark-notified/:id -> acknowledge a clicked notification
+// The route is protected and moves the article back into the saved queue
+router.put("/mark-notified/:id", protect, markArticleAsNotified);
 
 // DELETE /api/articles/:id -> delete an article
 // The route is protected and only deletes articles owned by the logged-in user

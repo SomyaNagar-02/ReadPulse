@@ -3,7 +3,7 @@
   "name": "ReadFlow",
   "version": "1.0.0",
   "description": "A smart reading assistant that suggests saved articles based on free time.",
-  "permissions": ["activeTab", "idle", "storage"],
+  "permissions": ["activeTab", "idle", "storage", "notifications", "tabs"],
   "host_permissions": ["http://localhost:5000/*"],
   "background": {
     "service_worker": "background.js"

@@ -1,61 +1,177 @@
-const NUDGE_COOLDOWN_MS = 60 * 60 * 1000;
-const IDLE_AFTER_SECONDS = 5 * 60;
+const API_BASE_URL = "http://localhost:5000/api";
+const CHECK_INTERVAL_MS = 60 * 1000;
+const notificationArticleMap = {};
+const NOTIFICATION_ICON_URL = "/icon.png";
 
-// Chrome calls this file in the background because Manifest V3 uses a service worker.
-// The worker does not fetch articles. It only decides when a gentle nudge is appropriate.
-chrome.idle.setDetectionInterval(IDLE_AFTER_SECONDS);
+console.log("ReadFlow background service worker started");
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.idle.setDetectionInterval(IDLE_AFTER_SECONDS);
-});
+// This helper shows a Chrome notification for one article.
+// A local icon path is required for extension notifications.
+const showReadNotification = (articleId, articleTitle, articleUrl) => {
+  const notificationId = `read-${articleId}`;
 
-chrome.runtime.onStartup.addListener(() => {
-  createReadingNudge("startup");
-});
+  console.log("Showing notification for article:", articleId, articleTitle);
 
-chrome.idle.onStateChanged.addListener((state) => {
-  if (state === "idle") {
-    createReadingNudge("idle");
+  notificationArticleMap[notificationId] = {
+    articleId,
+    articleUrl
+  };
+
+  chrome.notifications.create(
+    notificationId,
+    {
+      type: "basic",
+      iconUrl: NOTIFICATION_ICON_URL,
+      title: "Time to Read",
+      message: `Your scheduled article is ready: ${articleTitle}`,
+      priority: 2
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.log("Notification create error:", chrome.runtime.lastError.message);
+      }
+    }
+  );
+};
+
+// Fetch scheduled articles that are ready right now.
+const fetchScheduledReadyArticles = async () => {
+  const { token } = await chrome.storage.local.get("token");
+
+  if (!token) {
+    console.log("No token found, skipping scheduled article check");
+    return [];
   }
-});
 
-const createReadingNudge = async (reason) => {
-  const { token, lastReadingNudgeAt } = await chrome.storage.local.get([
-    "token",
-    "lastReadingNudgeAt"
-  ]);
+  console.log("Checking backend for scheduled-ready articles");
 
-  // If the user is not logged in, the assistant stays quiet.
+  const response = await fetch(`${API_BASE_URL}/articles/scheduled-ready`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to fetch scheduled-ready articles");
+  }
+
+  return data;
+};
+
+// Mark an article as notified after the user clicks the notification.
+const markArticleAsNotified = async (articleId) => {
+  const { token } = await chrome.storage.local.get("token");
+
   if (!token) {
     return;
   }
 
-  const now = Date.now();
-
-  // This keeps the assistant from feeling like notification spam.
-  if (lastReadingNudgeAt && now - lastReadingNudgeAt < NUDGE_COOLDOWN_MS) {
-    return;
-  }
-
-  await chrome.storage.local.set({
-    lastReadingNudgeAt: now,
-    pendingReadingNudge: {
-      reason,
-      createdAt: now
+  const response = await fetch(`${API_BASE_URL}/articles/mark-notified/${articleId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
     }
   });
 
-  chrome.action.setBadgeText({ text: "READ" });
-  chrome.action.setBadgeBackgroundColor({ color: "#6c5ce7" });
-  chrome.action.setTitle({ title: "Got some free time?" });
+  const data = await response.json();
 
-  // Some Chrome versions allow an extension to open its popup programmatically.
-  // If that is unavailable, the badge still gives a quiet visual cue.
-  if (chrome.action.openPopup) {
-    try {
-      await chrome.action.openPopup();
-    } catch (error) {
-      console.log("Popup will open when the user clicks the extension:", error);
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to mark article as notified");
+  }
+
+  console.log("Marked article as notified:", articleId);
+};
+
+// Find due scheduled articles, notify once, and store notified ids in chrome.storage.
+const checkScheduledArticles = async () => {
+  try {
+    const articles = await fetchScheduledReadyArticles();
+    const readyArticleIds = articles.map((article) => article._id);
+    const { notifiedScheduledArticles = [] } = await chrome.storage.local.get(
+      "notifiedScheduledArticles"
+    );
+
+    // Remove ids that are no longer ready, so future schedules can notify again.
+    const updatedNotifiedIds = notifiedScheduledArticles.filter((articleId) =>
+      readyArticleIds.includes(articleId)
+    );
+
+    for (const article of articles) {
+      // Notify only if this article id has not been notified already.
+      if (updatedNotifiedIds.includes(article._id)) {
+        continue;
+      }
+
+      showReadNotification(article._id, article.title, article.url);
+      updatedNotifiedIds.push(article._id);
     }
+
+    await chrome.storage.local.set({
+      notifiedScheduledArticles: updatedNotifiedIds
+    });
+
+    console.log("Scheduled article check completed. Ready articles:", articles.length);
+  } catch (error) {
+    console.log("Scheduled article check failed:", error.message);
   }
 };
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("ReadFlow extension installed");
+
+  // This test notification confirms the notification system is alive.
+  chrome.notifications.create(
+    "readflow-install-test",
+    {
+      type: "basic",
+      iconUrl: NOTIFICATION_ICON_URL || "icon.png",
+      title: "Time to Read",
+      message: "ReadFlow notifications are ready.",
+      priority: 2
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.log("Install notification error:", chrome.runtime.lastError.message);
+      }
+    }
+  );
+
+  checkScheduledArticles();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  console.log("ReadFlow extension started");
+  checkScheduledArticles();
+});
+
+// Poll backend every 1 minute for ready scheduled articles.
+setInterval(() => {
+  console.log("Running scheduled article poll");
+  checkScheduledArticles();
+}, CHECK_INTERVAL_MS);
+
+// Notification clicks open the article and then notify the backend.
+chrome.notifications.onClicked.addListener(async (notificationId) => {
+  const notificationData = notificationArticleMap[notificationId];
+
+  console.log("Notification clicked:", notificationId);
+
+  if (!notificationData) {
+    return;
+  }
+
+  chrome.tabs.create({ url: notificationData.articleUrl });
+
+  try {
+    await markArticleAsNotified(notificationData.articleId);
+  } catch (error) {
+    console.log("Failed to mark article as notified:", error.message);
+  }
+
+  delete notificationArticleMap[notificationId];
+  chrome.notifications.clear(notificationId);
+});
