@@ -46,7 +46,7 @@ const renderAssistant = (isNudge) => {
   showSection(assistantSection);
   popupDescription.textContent = isNudge
     ? "Got some free time?"
-    : "Pick a time window and ReadFlow will suggest a few saved articles.";
+    : "Pick a time window and ReadPulse will suggest a few saved articles.";
 };
 
 const renderSuggestions = (articles, minutes) => {
