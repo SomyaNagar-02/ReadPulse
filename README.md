@@ -14,7 +14,7 @@ ReadPulse addresses this problem by combining frictionless article saving with i
 
 ## ✨ Features
 
-### 🔐 Authentication
+### 🔐 Authentication 
 - User Registration & Login
 - JWT-based Authentication
 - Protected Routes
