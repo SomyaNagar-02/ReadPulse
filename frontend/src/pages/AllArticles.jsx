@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
-import ArticleCard from "../components/ArticleCard";
+import ArticleCard from "../components/ArticleCard";  
 import { api } from "../services/api";
 import "./AllArticles.css";
 
@@ -65,9 +65,9 @@ function AllArticles() {
   const handleSchedule = async (articleId, scheduledAt) => {
     try {
       const data = await api.scheduleArticle(articleId, scheduledAt);
-      updateArticleInState(articleId, {
+      updateArticleInState(articleId, {  
         status: data.article.status,
-        scheduledAt: data.article.scheduledAt
+        scheduledAt: data.article.scheduledAt  
       });
     } catch (actionError) {
       setError(actionError.message);
